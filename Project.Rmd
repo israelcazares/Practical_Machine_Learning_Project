@@ -1,0 +1,171 @@
+---
+title: "Practical Machine Learning Project"
+author: "Manuel Cazares"
+date: "25 de enero de 2015"
+output: html_document
+---
+
+**Background**
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://groupware.les.info.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset). If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+**Data**
+
+The training data for this project are available here: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here: 
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+**What you should submit**
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+1. Your submission should consist of a link to a Github repo with your R markdown and compiled HTML file describing your analysis. Please constrain the text of the writeup to < 2000 words and the number of figures to be less than 5. It will make it easier for the graders if you submit a repo with a gh-pages branch so the HTML page can be viewed online (and you always want to make it easy on graders :-).
+2. You should also apply your machine learning algorithm to the 20 test cases available in the test data above. Please submit your predictions in appropriate format to the programming assignment for automated grading. See the programming assignment for additional details. 
+
+**How you built your model**
+
+Our objective is the classe variable in the data set, this variable has 5 levels (A, B, C, D, E):
+
+* exactly according to the specification (Class A)
+* throwing the elbows to the front (Class B)
+* lifting the dumbbell only halfway (Class C)
+* lowering the dumbbell only halfway (Class D)
+* throwing the hips to the front (Class E)
+
+The first level is related to the correct application of the exercise and the rest levels corresponds to a wrong application of the exercise. The goals of the prediction is to maximize the accuracy and minimize the out of sample error; to achieve this two models will be used and tested, one using the decision tree model, and the other will use the random forest model.
+
+**Expected Out of Sample Error**
+
+The expected value of the out of sample error will be the expected number of missclassified observations/total observations in the test data set, which is the quantity: 1-accuracy found from the cross-validation data set.
+
+**Loading and cleaning data**
+
+
+```{r}
+#loading required libraries
+library(caret)
+library(ggplot2)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
+#set seed to 32345 in order to get the same random samples.
+set.seed(32345)
+
+#Training File URL
+trainUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+#Test File URL
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainFilePath <- "./assets/pml-training.csv"
+testFilePath <- "./assets/pml-testing.csv"
+
+if(!file.exists("./assets")) {
+  dir.create("./assets")
+}
+if(!file.exists("./assets/pml-training.csv")) {
+	download.file(trainUrl, destfile = trainFilePath, method="curl")
+}
+if(!file.exists("./assets/pml-testing.csv")) {
+	download.file(testUrl, destfile = testFilePath, method="curl")
+}
+
+trainData <- read.csv(trainFilePath, na.strings=c("NA","#DIV/0!", ""))
+testData <- read.csv(testFilePath, na.strings=c("NA","#DIV/0!", ""))
+
+
+# Delete columns with all missing values
+trainData<- trainData[,colSums(is.na(trainData)) == 0]
+testData <- testData[,colSums(is.na(testData)) == 0]
+
+# Delete irrelevant variables.
+trainData <- trainData[,-c(1:7)]
+testData <- testData[,-c(1:7)]
+
+#View clean data
+#head(trainData)
+#head(testData)
+
+```
+
+**Create data partition to perform cross validation**
+
+* The training data contains 53 variables and 19622 obs.
+* The testing data contains 53 variables and 20 obs.
+
+To perform cross-validation, we create two partionned data sets (using random subsampling wihtout replacement) from the training data: training (60%) and testing (40%).
+
+```{r}
+#Partitioning the training data set to allow cross-validation
+
+inTrain <- createDataPartition(y=trainData$classe, p=0.6, list=FALSE)
+
+training <- trainData[inTrain,]
+testing <- trainData[-inTrain,]
+dim(training); dim(testing)
+
+```
+
+**Prediction Models**
+
+* First Prediction Model using decision tree
+
+```{r}
+
+#prediction model
+
+modFit <- train(classe ~ ., method="rpart", data=training)
+print(modFit$finalModel)
+
+fancyRpartPlot(modFit$finalModel)
+
+#prediction
+prediction <- predict(modFit, newdata=testing)
+
+# Test results on our sub testing data set:
+confusion1 <- confusionMatrix(prediction, testing$classe)
+print(confusion1)
+
+````
+
+* Second Prediction Model using Random Forest
+
+```{r}
+
+modFit2 <- randomForest(classe ~. , data=training, method="class")
+
+# Predicting:
+prediction2 <- predict(modFit2, testing, type = "class")
+
+# Test results on sub testing data set:
+confusion2 <- confusionMatrix(prediction2, testing$classe)
+print(confusion2)
+
+````
+
+* Final prediction
+
+```{r}
+# predict outcome levels on the original Testing data set using Random Forest algorithm
+predictfinal <- predict(modFit2, testData, type="class")
+predictfinal
+````
+
+**Conclusion**
+
+The accuracy for Random Forest Model was 0.9917:
+
+* 95% CI : (0.9895, 0.9936)
+
+
+The accuracy for Desicion Tree Model was 0.4823:
+
+* 95% CI : (0.4712, 0.4934)
+
+Then we can conclude that the Random Forest algorithm performed better than the Decision Trees, so the Random Forest is the chosen one. The expected out of sample error is calculated as 1 - accuracy for predictions made against the cross validation set. With an accuracy above of 99% on our cross validation data, we can expect that very few, or none, of the test samples will be missclassified.
